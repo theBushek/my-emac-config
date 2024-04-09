@@ -1,0 +1,571 @@
+#+PROPERTY: header-args:emacs-lisp :tangle ./init.el
+#+title: EMAC(s) core - not really beacuse i dont want to bother with multiple org files for config
+
+* *core*
+This is the config i cant function without (almost - there is more that i need) and on which i base everything else
+
+** *packages*
+i use straight.el because ive seen it on sys crafters and it looked kool (i wont use 99% of its features i just wanted to easly clean up unused packages)
+and i use use-package because i dont have a reason to switch to leaf
+
+*** /straight.el/
+
+#+begin_src emacs-lisp
+  (defvar bootstrap-version)
+  (let ((bootstrap-file
+         (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
+        (bootstrap-version 6))
+    (unless (file-exists-p bootstrap-file)
+      (with-current-buffer
+          (url-retrieve-synchronously "https://raw.githubusercontent.com/radian-software/straight.el/develop/install.el"
+           'silent 'inhibit-cookies)
+        (goto-char (point-max))
+        (eval-print-last-sexp)))
+    (load bootstrap-file nil 'nomessage))
+#+end_src
+
+*** /use-package/
+
+#+begin_src emacs-lisp
+  (straight-use-package 'use-package)
+  (setq straight-use-package-by-default t)
+  (setq use-package-always-ensure nil)
+#+end_src
+
+** *(startup) optimization*
+make it blazing fast :rocket: :rocket: :rocket:
+
+*** /no-littering/
+dont litter the .emacs.d
+
+#+begin_src emacs-lisp
+  (use-package no-littering)
+#+end_src
+
+*** /gc/
+make emacs gc less at startup and then after dail it back to avoid memory hog
+
+#+begin_src emacs-lisp
+  (setq gc-cons-threshold (* 70 1000 1000))
+
+  (defun emac/gc-startup-time ()
+    (message "Emacs gc'ed %d times while loading" gcs-done))
+  (add-hook 'emacs-startup-hook #'emac/gc-startup-time)
+
+  (add-hook 'after-init-hook 'emac/after-init)
+
+  (defun emac/after-init ()
+    (progn
+      (setq gc-cons-threshold (* 2 1000 1000))
+      (if (boundp 'use-short-answers)
+          (setq use-short-answers t)
+        (advice-add 'yes-or-no-p :override #'y-or-n-p))))
+#+end_src
+
+** *basic ui*
+i would die if theres all this clutter
+
+#+begin_src emacs-lisp
+  ; (set-face-attribute 'default 0 :font "IBM Plex Mono" :height 120)
+
+  (scroll-bar-mode -1)
+  (tool-bar-mode -1)
+  (tooltip-mode -1)
+  (set-fringe-mode 10)
+  (menu-bar-mode -1)
+
+  (column-number-mode)
+  (global-display-line-numbers-mode t)
+  (dolist (mode '(org-mode-hook
+                  term-mode-hook
+                  eshell-mode-hook
+                  vterm-mode-hook
+                  geiser-repl-mode-hook
+                  sly-mrepl-mode-hook))
+    (add-hook mode (lambda () (display-line-numbers-mode 0))))
+#+end_src
+
+fonts apparently dont work really good so lets add them to the after-init-hook
+WHAT THE FUCK IS WRONG WITH FONTS
+
+#+begin_src emacs-lisp
+    (defun emac/font-setting ()
+      (progn
+        (set-face-attribute 'default 0 :family "mono" :height 120)))
+
+    (add-hook 'after-init-hook 'emac/font-setting)
+#+end_src
+
+** *org-mode*
+only here because the config is written in org
+
+*** /main org/
+
+#+begin_src emacs-lisp
+  (defun emac/org-mode-setup ()
+    (org-indent-mode)
+    (visual-line-mode 1))
+
+  ;;add padding at the side and center it
+  (defun emac/org-mode-visual-fill ()
+    (setq visual-fill-column-width 150
+          visual-fill-column-center-text t)
+    (visual-fill-column-mode 1))
+  (use-package visual-fill-column
+    :hook (org-mode . emac/org-mode-visual-fill))
+
+  (use-package org
+    :hook (org-mode . emac/org-mode-setup)
+    :init (setq org-ellipsis " v"
+                org-hide-emphasis-markers nil)
+    :custom
+    (org-support-shift-select t))
+   ;;nice looking icons for headings
+  (use-package org-bullets
+    :after org
+    :hook (org-mode . org-bullets-mode))
+  ;;code blocks
+  (with-eval-after-load 'org
+        (org-babel-do-load-languages
+         'org-babel-load-languages
+         '((emacs-lisp . t)
+           (scheme . t)
+           (lisp . t))))
+  (use-package org-tempo
+    :after org
+    :straight nil
+    :config
+    (add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp")))
+#+end_src
+
+*** /auto tangle configs/
+
+#+begin_src emacs-lisp
+  (defun emac/org-babel-tangle-config ()
+    (when (string-equal (buffer-file-name)
+                        (expand-file-name "~/.emacs.d/emac-core.org"))
+      (let ((org-confirm-babel-evaluate nil))
+        (org-babel-tangle))))
+  (add-hook 'org-mode-hook (lambda () (add-hook 'after-save-hook #'emac/org-babel-tangle-config)))
+#+end_src
+
+** *start page*
+
+#+begin_src emacs-lisp
+  (use-package dashboard
+    :init
+    (dashboard-setup-startup-hook)
+    :config
+    (setq dashboard-banner-logo-title "Funne emacs without s (EMAC)")
+    (setq dashboard-center-content t)
+    (setq dashboard-items '((recents . 4)))
+    (setq dashboard-set-file-icons t)
+    (setq dashboard-set-init-into t))
+#+end_src
+
+** *terminals*
+
+#+begin_src emacs-lisp
+  (use-package vterm
+    :commands vterm
+    :config (setq vterm-max-scrollback 10000)
+    :bind (:map vterm-mode-map
+                ("C-M-j" . consult-buffer)))
+#+end_src
+
+* *ui*
+since i cant really bare the default emacs theme and the modeline is kinda lacking im going to add bloat
+
+** *rainbow-x*
+
+#+begin_src emacs-lisp
+  (use-package rainbow-delimiters
+    :hook (prog-mode . rainbow-delimiters-mode)
+          (sly-mrepl-mode . rainbow-delimiters-mode))
+  (use-package rainbow-mode
+    :hook (rainbow-delimiters-mode . rainbow-mode))
+#+end_src
+
+** *ibm-carbon-theme*
+
+#+begin_src emacs-lisp
+  (straight-use-package '(ibm-carbon-emacs-themes :type git :host github
+                                                  :repo "theBushek/ibm-carbon-emacs-themes"
+                                                  :build autoloads
+                                                  :files ("ibm-carbon-gray-100-theme.el")))
+#+end_src
+
+** *doom*
+
+*** /themes/
+doom-themes are a bit iffy since sometimes they replace all text (except for some colors) with boxes (placeholders) which im not sure is a problem with my theme or doom-themes itself (im assuming some update to doom-themes broke it) - turns out it was the FONT bruh bruh bruh
+
+#+begin_src emacs-lisp
+  (use-package doom-themes
+    :config
+    (load-theme 'ibm-carbon-gray-100 t)
+    (setq doom-themes-enable-bold t
+          doom-themes-enable-italic t)
+    (doom-themes-visual-bell-config)
+    :custom
+    (ibm-carbon-gray-100-warm t)
+    (ibm-carbon-gray-100-line-number-colored t))
+#+end_src
+
+*** /modeline/
+
+#+begin_src emacs-lisp
+  ;; (use-package all-the-icons)
+  (use-package doom-modeline
+    :init
+    (doom-modeline-mode 1)
+    :custom
+    (doom-modeline-icon t)
+    :config
+    (setq doom-modeline-height 35)
+    (setq doom-modeline-minor-modes nil)
+    (setq doom-modeline-icon nil)
+    (setq doom-modeline-buffer-encoding nil)
+    (setq doom-modeline-indent-info nil)
+    (setq doom-modeline-modal-icon nil))
+
+  (use-package diminish)                       ;diminish deminishes the too minor packages in the modeline
+#+end_src
+
+* *programing productivity*
+this is not keybindings its only really good side programms that enhance the programers productivity (greatly)
+
+** *flymake*
+to check for errors on the fly and highlight them
+
+#+begin_src emacs-lisp
+  (use-package flymake
+    :straight nil
+    :hook (prog-mode . flymake-mode)
+    :config (custom-set-faces
+             '(flymake-errline ((((class color)) (:underline "red"))))
+             '(flymake-warnline ((((class color)) (:underline "yellow")))))
+    :custom (flymake-fringe-indicator-position 'left-fringe))
+#+end_src
+
+** *minibuffer*
+vertico is a minimal minibuffer upgrade and marginala show the short description of the selected thing
+consult to vertico is like counsel to ivy (kind of - it adds many features)
+
+*** /vertico/
+
+#+begin_src emacs-lisp
+  (use-package vertico
+    :init (vertico-mode)
+    :config (setq vertico-cycle t)
+    :bind (:map vertico-map
+           ("C-j" . vertico-next)
+           ("C-k" . vertico-previous)))
+#+end_src
+
+*** /marginala/
+
+#+begin_src emacs-lisp
+  (use-package marginalia
+    :after vertico
+    :init (marginalia-mode))
+#+end_src
+
+*** /consult/
+
+#+begin_src emacs-lisp
+  (use-package consult
+    :after vertico
+    :bind (("C-M-j" . consult-buffer)
+           ("C-x b" . consult-buffer)
+           ("C-s" . consult-line)))
+#+end_src
+
+*** /orderless/
+
+#+begin_src emacs-lisp
+  (use-package orderless
+    :after vertico
+    :init
+    (setq completion-styles '(orderless basic)
+          completion-category-defaults nil
+          completion-category-overrides '((file (styles partial-completion)))))
+#+end_src
+
+** *for easier navigation through emacs adventures*
+
+*** /keybindings/
+
+#+begin_src emacs-lisp
+  (global-set-key (kbd "C-k") 'delete-backward-char)
+  (global-set-key (kbd "<escape>") 'keyboard-quit) ;;make the escape key, y'know, actually escape the current thing
+#+end_src
+
+*** /helpful/
+
+#+begin_src emacs-lisp
+    (use-package helpful
+      :bind
+      ([remap describe-function] . helpful-callable)
+      ([remap describe-command] . helpful-command)
+      ([remap describe-variable] . helpful-variable)
+      ([remap describe-key] . helpful-key)
+      ([remap describe-symbol] . helpful-symbol))
+#+end_src
+
+*** /which-key/
+prompts up the next available keys for actions (what are the keys and what actions do they trigger)
+
+#+begin_src emacs-lisp
+  (use-package which-key
+    :init (which-key-mode)
+    :diminish which-key-mode
+    :config
+    (setq which-key-idle-delay 0.7))
+#+end_src
+
+** *nice things when writing*
+
+*** /evil-nerd-commenter/
+bound to M-;
+
+#+begin_src emacs-lisp
+  (defun evil-nerd-commenter-setup ()
+    (local-set-key (kbd "M-;") 'evilnc-comment-or-uncomment-lines))
+
+  (use-package evil-nerd-commenter
+    :hook (prog-mode . evil-nerd-commenter-setup))
+#+end_src
+
+*** /undo-fu/
+C-z/C-x u bound to undo, C-r to redo
+
+#+begin_src emacs-lisp
+  (use-package undo-fu
+    :bind (("C-z" . undo-fu-only-undo)
+           ("C-x u" . undo-fu-only-undo)
+           ("C-r" . undo-fu-only-redo)))
+#+end_src
+
+*** /easier look at the kill ring (clipboard)/
+bound to M-y
+
+#+begin_src emacs-lisp
+  (use-package browse-kill-ring
+    :bind ("M-y" . browse-kill-ring))
+#+end_src
+
+*** /way better indentation/
+
+#+begin_src emacs-lisp
+  (use-package aggressive-indent
+    :hook (prog-mode . aggressive-indent-mode))
+#+end_src
+
+** *superior lisp writing experience*
+
+*** /paredit/
+bindings: wrap around                       M-(, M-"
+          forward delete                    C-d
+          forward kill word                 M-d
+          backward kill word                M-k
+          forward kill                      C-k
+          slurp/barf backward               C-(/C-{ (example: (one (two)) three -slurp-> (one (two) three)
+          slurp/barf forward                C-)/C-}
+
+          navigation:
+          paredit forward/backward          C-M-f/C-M-b
+          forward up/down                   C-M-n/C-M-d
+          backward up/down                  C-M-u/C-M-p
+          split/join sexps                  M-S/M-J
+          splice                            M-s
+          splice kill forward/backward      M-<down>/M-<up>
+
+          convolute                         M-?
+
+#+begin_src emacs-lisp
+  (use-package paredit
+    :hook
+    (lisp-mode . paredit-mode)
+    (emacs-lisp-mode . paredit-mode)
+    (scheme-mode . paredit-mode))
+  ;; :bind (:map sly-mrepl-mode-map   ; this was ment to rebind tab from the paredit one to sly
+   ;;             ))
+#+end_src
+
+*** /little snipets/
+#+begin_src emacs-lisp
+  (defun emac/base-system ()
+    )
+#+end_src
+
+* *lsp, language specifics and programing ui*
+
+** *lsp*
+i will try and use eglot with corfu, and then if it wont work good ill switch corfu with company and eglot with lsp-bridge (maybe)
+
+*** /elgot/
+
+#+begin_src emacs-lisp
+;;  (use-package eglot
+;;    :commands eglot)
+#+end_src
+
+** *completion*
+
+*** /corfu/
+
+#+begin_src emacs-lisp
+  (use-package corfu
+    :hook
+    (prog-mode . global-corfu-mode)
+    (global-corfu-mode . corfu-popupinfo-mode)
+    :config
+    (advice-add 'eglot-completion-at-point :around #'cape-wrap-buster)
+    (setq completion-category-overrides '((elgot (styles orderless))))
+    (require 'corfu-info (expand-file-name "straight/repos/corfu/extensions/corfu-info" user-emacs-directory))
+    (require 'corfu-popupinfo (expand-file-name "straight/repos/corfu/extensions/corfu-popupinfo" user-emacs-directory))
+    :bind (("\t" . completion-at-point)
+           :map corfu-map
+                ("C-j" . corfu-next)
+                ("C-k" . corfu-previous))
+    :custom
+    (corfu-auto nil)
+    (corfu-cycle nil)
+    (corfu-bar-width 1)
+    (corfu-min-width 20)
+    (corfu-popupinfo-delay 1.0)
+    (corfu-popupinfo-max-height 20)
+    (corfu-popupinfo-min-height 2)
+    (corfu-scroll-margin 3)
+    (corfu-left-margin-width 1)
+    (corfu-right-margin-width 1))
+
+  (use-package cape
+    :after corfu
+    :config
+    (add-to-list 'completion-at-point-functions #'cape-elisp-block)
+    (add-to-list 'completion-at-point-functions #'cape-file)
+    (add-to-list 'completion-at-point-functions #'cape-history))
+#+end_src
+
+** *nice little things*
+
+*** /global-highlight-thing-mode/
+
+#+begin_src emacs-lisp
+  (use-package highlight-thing
+    :config
+    (setq highlight-thing-limit-to-regoin-in-large-biffers-p nil
+          highlight-thing-narrow-region-lines 30
+          highlight-thing-large-buffer-limit 3000)
+    :hook (prog-mode . highlight-thing-mode))
+#+end_src
+
+** *language specifics*
+
+*** /common lisp/
+
+**** /sly/
+M-. - slime-edit-definition (jump to definition)
+M-, - to jump back
+
+REFERENCING
+C-c C-w f - function callers
+        m - places where there is macroexpansion
+        r - global variable references
+        b -                 variables
+        s -                 setters
+        a - methods specialized on a symbol
+        d - asdf depens
+M-?/M-_ - lists all of the above
+
+DOCS
+C-c C-d d - describe symbol
+        f -          function
+---------from this point on only with clhs----------
+        h - look up in CLHS
+        # - reader macros
+        ~ - format directives
+        g - look up glossary
+C-c C-m - macroexpand
+
+EVAL and COMPILE
+C-c C-k - compile and load file
+M-x sly compile region
+C-M-x - eval defun
+C-c C-c - compile defun
+C-c C-j - eval last sexp and jump to repl
+C-c C-r - eval region
+
+in common lisp do:
+#+begin_src lisp
+  (ql:quickload
+#+end_src
+#+begin_src emacs-lisp
+  (use-package sly
+    :commands sly
+    :config (sly-symbol-completion-mode -1)
+    :custom (inferior-lisp-program "sbcl"))
+#+end_src
+
+*** /scheme (guile)/
+
+**** /guix/
+
+#+begin_src emacs-lisp
+  ;;emacs-guix is already installed and require throws a warining
+  (add-hook 'scheme-mode-hook 'guix-devel-mode)
+#+end_src
+
+**** /geiser/
+
+#+begin_src emacs-lisp
+  (use-package geiser
+    :commands geiser
+    :custom (scheme-program-name "guile"))
+
+  (use-package geiser-guile
+    :after geiser)
+#+end_src
+
+* *emacs specifics*
+
+#+begin_src emacs-lisp
+  (use-package emacs
+      :straight nil
+      :init
+      (setq completion-cycle-threshold 3) ;;i set these two the way corfu reccommended me
+      (setq tab-always-indent 'complete)
+      (setq pixel-scroll-mode 1))
+
+  ;; removing the delete other windows feature form keyboard-escape-quit because its annoying
+  (defun keyboard-escape-quit ()
+    "Exit the current \"mode\" (in a generalized sense of the word).
+  This command can exit an interactive command such as `query-replace',
+  can clear out a prefix argument or a region,
+  can get out of the minibuffer or other recursive edit,
+  cancel the use of the current buffer (for special-purpose buffers),
+  or go back to just one window (by deleting all but the selected window).
+  But i removed the delete-other-windows and moved it to make-only-one-window."
+    (interactive)
+    (cond ((eq last-command 'mode-exited) nil)
+          ((region-active-p)
+           (deactivate-mark))
+          ((> (minibuffer-depth) 0)
+           (abort-recursive-edit))
+          (current-prefix-arg
+           nil)
+          ((> (recursion-depth) 0)
+           (exit-recursive-edit))
+          (buffer-quit-function
+           (funcall buffer-quit-function))
+          ((string-match "^ \\*" (buffer-name (current-buffer)))
+           (bury-buffer))))
+
+  (defun make-only-one-window ()
+    (interactive)
+    (unless (one-window-p t)
+      (delete-other-windows)))
+#+end_src
+
